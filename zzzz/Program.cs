@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Buffers.Binary;
+using System.Collections;
+using System.Text;
 using zzzz.Model;
 
 namespace zzzz;
@@ -75,6 +77,14 @@ class Program
         var paddedBytes = AddPadding(fileBytes, 4);
         var blocks = SplitIntoBlocks(paddedBytes, 4);
         PrintBlocks(blocks);
+
+        // First Round
+        byte[][] encryptedBlocks = new byte[blocks.Length][];
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            encryptedBlocks[i] = EncryptBlock(blocks[i]);
+        }
+        PrintBlocks(encryptedBlocks);
         
         // TODO: Check if ciphertext is multiple of block length
         var concatenatedBytes = ConcatenateBlocks(blocks);
@@ -102,16 +112,14 @@ class Program
 
         if (paddingBytes < 1 || paddingBytes > blockSize)
         {
-            Console.WriteLine($"FATAL: Invalid number of padding bytes ({paddingBytes}) for a block size of {blockSize}.");
-            throw new InvalidOperationException("Invalid number of padding bytes.");
+            throw new InvalidOperationException($"Invalid number of padding bytes ({paddingBytes}) for a block size of {blockSize}.");
         }
         
         for (int i = 0;  i < paddingBytes; i++)
         {
             if (bytes[bytes.Length - 1 - i] != paddingBytes)
             {
-                Console.WriteLine($"FATAL: Invalid padding: Expected '{(int)paddingBytes}', got '{(int)bytes[bytes.Length - 1 - i]}'.");
-                throw new InvalidOperationException("Invalid padding bytes.");
+                throw new InvalidOperationException($"Invalid padding: Expected '{(int)paddingBytes}', got '{(int)bytes[bytes.Length - 1 - i]}'.");
             }
         }
 
@@ -200,6 +208,29 @@ class Program
         }
     }
 
+    private static void PrintBlock(byte[] block)
+    {
+        foreach (var singleByte in block)
+        {
+            Console.WriteLine($"{singleByte,4:X2}");
+        }
+        Console.WriteLine();
+    }
+    
+    private static void PrintBits(byte[] block, bool addNewLines)
+    {
+        foreach (byte b in block)
+        {
+            Console.Write(Convert.ToString(b, 2).PadLeft(8, '0') + " ");
+            if (addNewLines)
+            {
+                Console.WriteLine();
+            }
+        }
+            
+        Console.WriteLine();
+    }
+
     private static int[] InverseBox(int[] box)
     {
         var inverse = new int[box.Length];
@@ -209,23 +240,86 @@ class Program
         }
         return inverse;
     }
+
+    private static byte[] SubstituteBlock(byte[] block, int[] sBox)
+    {
+        byte[] substitutedBlock = new byte[block.Length];
+        
+        // Block: 32-Bit (4 Bytes) | 1 Block will be processed by 8 S-Boxes
+        for (int i = 0; i < block.Length; i++)
+        {
+            // 1 Byte -> 2 S-Boxes (take 4 Bit each)
+            byte highNibble = (byte)(block[i] >> 4); // shift right by 4 Bit -> removes lower 4 Bit
+            byte lowNibble = (byte)(block[i] & 0x0f); // 0x0F -> 0000 1111 | & -> Bitwise AND | -> Remove upper 4 Bit
+
+            byte substitutedHighNibble = (byte)sBox[highNibble];
+            byte substitutedLowNibble = (byte)sBox[lowNibble];
+            
+            substitutedBlock[i] = (byte)((substitutedHighNibble << 4) | substitutedLowNibble);;
+        }
+        
+        return substitutedBlock;
+    }
+
+    private static byte[] PermutateBlock(byte[] block, int[] pBox)
+    {
+        BitArray unpermutatedBits = new BitArray(block);
+        BitArray permutatedBits = new BitArray(unpermutatedBits.Length);
+        
+        // C#'s BitArray numbers bits LSB-first within each byte (index 0 = least significant bit)
+        // The P-Table at the top of this program is written MSB-first (leftmost bit = position 0)
+        // This method translates paper indices to BitArray indices by mirroring the bit order within each byte; the byte order is unchanged.
+        // This method was written with the help of generative AI (GLM 5.3)
+        static int Idx(int paper)
+        {
+            const int bitsPerByte = 8;
+            int byteStart = bitsPerByte * (paper / bitsPerByte);  // first BitArray index of this byte (which byte the bit belongs to)
+            int offsetFromMsb = paper % bitsPerByte;
+            int offsetFromLsb = bitsPerByte - 1 - offsetFromMsb;  // mirror: MSB-first -> LSB-first
+
+            return byteStart + offsetFromLsb;
+        }
+
+        for (int i = 0; i < unpermutatedBits.Length; i++)
+        {
+            permutatedBits[Idx(pBox[i])] = unpermutatedBits[Idx(i)];
+            // permutatedBits[pBox[i]] = unpermutatedBits[i];
+        }
+        
+        byte[] permutatedBlock = new byte[block.Length];
+        permutatedBits.CopyTo(permutatedBlock, 0);
+        
+        return permutatedBlock;
+    }
     
-    private byte[] EncryptBlock(byte[] block)
+    private static byte[] EncryptBlock(byte[] block)
+    {
+        Console.WriteLine("\n--- New Block ---\n");
+        
+        var substitutedBlock = SubstituteBlock(block, SBox);
+        Console.WriteLine("Block after Substitution (S-Box):");
+        PrintBlock(substitutedBlock);
+        
+        Console.WriteLine("Block before Permutation (P-Box):");
+        PrintBits(substitutedBlock, addNewLines: true);
+        var permutatedBlock = PermutateBlock(substitutedBlock, PBox);
+        Console.WriteLine("Block after Permutation (P-Box):");
+        PrintBits(permutatedBlock, addNewLines: false);
+        
+        return permutatedBlock;
+    }
+
+    private static byte[] DecryptBlock(byte[] block)
     {
         return block;
     }
 
-    private byte[] DecryptBlock(byte[] block)
-    {
-        return block;
-    }
-
-    private byte[] EncryptEcb(byte[] plaintext)
+    private static byte[] EncryptEcb(byte[] plaintext)
     {
         return plaintext;
     }
 
-    private byte[] DecryptEcb(byte[] ciphertext)
+    private static byte[] DecryptEcb(byte[] ciphertext)
     {
         return ciphertext;
     }
