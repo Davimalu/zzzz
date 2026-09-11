@@ -3,7 +3,6 @@ using zzzz.Model;
 
 namespace zzzz;
 
-
 class Program
 {
     static void Main(string[] args)
@@ -60,7 +59,7 @@ class Program
         Console.WriteLine($"Input file consisting of {bytes.Length} bytes will be split into {totalBlocks} {blockSize}-byte blocks.");
         
         int requiredPadding = blockSize - (bytes.Length % blockSize);
-        if (requiredPadding != 4)
+        if (bytes.Length % blockSize != 0)
         {
             Console.WriteLine($"Because the number of bytes isn't a perfect multiple of the block size, we need {requiredPadding} additional bytes of padding.");
         }
