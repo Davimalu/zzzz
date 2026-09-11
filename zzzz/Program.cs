@@ -48,8 +48,52 @@ class Program
         var paddedBytes = AddPadding(fileBytes, 4);
         var blocks = SplitIntoBlocks(paddedBytes, 4);
         PrintBlocks(blocks);
+        
+        // TODO: Check if ciphertext is multiple of block length
+        var concatenatedBytes = ConcatenateBlocks(blocks);
+        var unpaddedBytes = RemovePadding(concatenatedBytes, 4);
+        File.WriteAllBytes("output.txt", unpaddedBytes);
     }
 
+    private static byte[] ConcatenateBlocks(byte[][] blocks)
+    {
+        byte[] bytes = new byte[blocks.Length * blocks[0].Length];
+
+        int writtenBytes = 0;
+        foreach (var block in blocks)
+        {
+            Array.Copy(block, 0, bytes, writtenBytes, block.Length);
+            writtenBytes += block.Length;
+        }
+        
+        return bytes;
+    }
+
+    private static byte[] RemovePadding(byte[] bytes, int blockSize)
+    {
+        var paddingBytes = (int)bytes.Last();
+
+        if (paddingBytes < 1 || paddingBytes > blockSize)
+        {
+            Console.WriteLine($"FATAL: Invalid number of padding bytes ({paddingBytes}) for a block size of {blockSize}.");
+            throw new InvalidOperationException("Invalid number of padding bytes.");
+        }
+        
+        for (int i = 0;  i < paddingBytes; i++)
+        {
+            if (bytes[bytes.Length - 1 - i] != paddingBytes)
+            {
+                Console.WriteLine($"FATAL: Invalid padding: Expected '{(int)paddingBytes}', got '{(int)bytes[bytes.Length - 1 - i]}'.");
+                throw new InvalidOperationException("Invalid padding bytes.");
+            }
+        }
+
+        byte[] unpaddedBytes = new byte[bytes.Length - paddingBytes];
+        Array.Copy(bytes, 0, unpaddedBytes, 0, unpaddedBytes.Length);
+        
+        return unpaddedBytes;
+    }
+    
     private static byte[] AddPadding(byte[] bytes, int blockSize)
     {
         Console.WriteLine($"\nLength of input file: {bytes.Length} bytes");
@@ -77,7 +121,6 @@ class Program
 
         return paddedBytes;
     }
-    
     
     private static byte[][] SplitIntoBlocks(byte[] bytes, int blockSize)
     {
