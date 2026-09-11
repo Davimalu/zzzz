@@ -1,5 +1,4 @@
-﻿using System.Buffers.Binary;
-using System.Collections;
+﻿using System.Collections;
 using System.Text;
 using zzzz.Model;
 
@@ -77,14 +76,23 @@ class Program
         var paddedBytes = AddPadding(fileBytes, 4);
         var blocks = SplitIntoBlocks(paddedBytes, 4);
         PrintBlocks(blocks);
-
-        // First Round
+        
+        // Rounds
         byte[][] encryptedBlocks = new byte[blocks.Length][];
-        for (int i = 0; i < blocks.Length; i++)
+        for (int i = 0; i < 8; i++)
         {
-            encryptedBlocks[i] = EncryptBlock(blocks[i]);
+            Console.WriteLine($"Round {i+1}");
+            
+            for (int j = 0; j < blocks.Length; j++)
+            {
+                encryptedBlocks[j] = EncryptBlock(blocks[j]);
+            }
+
+            blocks = encryptedBlocks;
+            PrintBlocks(encryptedBlocks);
         }
-        PrintBlocks(encryptedBlocks);
+        
+        // Decryption
         
         // TODO: Check if ciphertext is multiple of block length
         var concatenatedBytes = ConcatenateBlocks(blocks);
@@ -273,9 +281,10 @@ class Program
         static int Idx(int paper)
         {
             const int bitsPerByte = 8;
-            int byteStart = bitsPerByte * (paper / bitsPerByte);  // first BitArray index of this byte (which byte the bit belongs to)
+            int byteNumber = paper / bitsPerByte;                   // which byte this bit belongs to
+            int byteStart = bitsPerByte * byteNumber;               // first BitArray index of that byte
             int offsetFromMsb = paper % bitsPerByte;
-            int offsetFromLsb = bitsPerByte - 1 - offsetFromMsb;  // mirror: MSB-first -> LSB-first
+            int offsetFromLsb = bitsPerByte - 1 - offsetFromMsb;    // mirror: MSB-first -> LSB-first
 
             return byteStart + offsetFromLsb;
         }
@@ -283,7 +292,6 @@ class Program
         for (int i = 0; i < unpermutatedBits.Length; i++)
         {
             permutatedBits[Idx(pBox[i])] = unpermutatedBits[Idx(i)];
-            // permutatedBits[pBox[i]] = unpermutatedBits[i];
         }
         
         byte[] permutatedBlock = new byte[block.Length];
