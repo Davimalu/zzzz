@@ -1,4 +1,5 @@
-﻿using zzzz.Model;
+﻿using System.Text;
+using zzzz.Model;
 
 namespace zzzz;
 
@@ -58,8 +59,8 @@ class Program
         Console.WriteLine($"{bytes.Length} / {blockSize} = {bytes.Length / blockSize} | Remainder: {bytes.Length % blockSize}\n");
         Console.WriteLine($"Input file consisting of {bytes.Length} bytes will be split into {totalBlocks} {blockSize}-byte blocks.");
         
-        int requiredPadding = bytes.Length % blockSize;
-        if (requiredPadding != 0)
+        int requiredPadding = blockSize - (bytes.Length % blockSize);
+        if (requiredPadding != 4)
         {
             Console.WriteLine($"Because the number of bytes isn't a perfect multiple of the block size, we need {requiredPadding} additional bytes of padding.");
         }
@@ -77,43 +78,52 @@ class Program
         {
             paddedBytes[bytes.Length + i] = (byte)requiredPadding;
         }
-
-        foreach (var singleByte in paddedBytes)
-        {
-            Console.WriteLine(singleByte);
-        }
         
-        
+        // Split into blocks
         byte[][] blocks = new byte[totalBlocks][];
-        return blocks;
-        
-        
-        
-        
-        int copiedBytes = 0;
-        for (int copiedBlocks = 0; copiedBlocks < totalBlocks; copiedBlocks++)
-        {
-            Array.Copy(bytes, copiedBytes, blocks[copiedBlocks], 0, blockSize);
-            copiedBytes += blockSize;
-        }
 
-        foreach (var block in blocks)
+        for (int i = 0; i < totalBlocks; i++)
         {
-            Console.WriteLine($"--------------------");
-            foreach (var singleByte in block)
-            {
-                Console.WriteLine(singleByte);
-            }
-            Console.WriteLine();
+            blocks[i] = new byte[blockSize];
+            Array.Copy(paddedBytes, i * blockSize, blocks[i], 0, blockSize);
         }
         
-        // Padding
+        PrintBlocks(blocks);
         return blocks;
     }
-
-    private static void Encrypt()
+    
+    // This method was written with the help of generative AI (GLM 5.3)
+    private static void PrintBlocks(byte[][] blocks, int blocksPerLine = 6)
     {
-        // 1 char -> 8 Bit -> 32 / 8 = 4 characters per block
-        Console.WriteLine("Step 1: The string will be split into multiple 32-bit blocks");
+        Console.WriteLine();
+        
+        for (int start = 0; start < blocks.Length; start += blocksPerLine)
+        {
+            var asciiLine = new StringBuilder();
+            var hexLine = new StringBuilder();
+
+            int end = Math.Min(start + blocksPerLine, blocks.Length);
+
+            for (int i = start; i < end; i++)
+            {
+                if (i > start) // block separator between blocks, not before the first
+                {
+                    asciiLine.Append(" |");
+                    hexLine.Append(" |");
+                }
+
+                foreach (byte singleByte in blocks[i])
+                {
+                    // Printable ASCII range -> show the char; otherwise a dot
+                    char c = (singleByte >= 32 && singleByte < 127) ? (char)singleByte : '.';
+                    asciiLine.Append($"{c,4}");
+                    hexLine.Append($"{singleByte,4:X2}");
+                }
+            }
+            
+            Console.WriteLine(asciiLine);
+            Console.WriteLine(hexLine);
+            Console.WriteLine();
+        }
     }
 }
