@@ -5,6 +5,33 @@ namespace zzzz;
 
 class Program
 {
+    // S-Box (4 Bit -> 4 Bit, Bijective)
+    // Taken from PRESENT Cipher: https://link.springer.com/chapter/10.1007/978-3-540-74735-2_31 | Page 4
+    private static readonly int[] SBox =
+    {
+        0xC, 0x5, 0x6, 0xB, 0x9, 0x0, 0xA, 0xD,
+        0x3, 0xE, 0xF, 0x8, 0x4, 0x7, 0x1, 0x2
+    };
+    private static readonly int[] SBoxInv = InverseBox(SBox);
+    
+    // P-Box (32 Bit, same as block length | Each P-Box will be fed by 8 S-Boxes (8 * 4 = 32 Bit))
+    // 32-Bit is quite small -> I didn't find an existing one -> Used "Spaltentransposition" with key length of 4
+    /*  0   1   2   3
+     *  4   5   6   7
+     *  8   9   10  11
+     *  12  13  14  15
+     *  16  17  18  19
+     *  20  21  22  23
+     *  24  25  26  27
+     *  28  29  30  31
+     */
+    private static readonly int[] PBox =
+    {
+        0, 4, 8, 12, 16, 20, 24, 28, 1, 5, 9, 13, 17, 21, 25, 29,
+        2, 6, 10, 14, 18, 22, 26, 30, 3, 7, 11, 15, 19, 23, 27, 31
+    };
+    private static readonly int[] PBoxInv = InverseBox(PBox);
+    
     static void Main(string[] args)
     {
         string logo = File.ReadAllText("assets/logo.txt");
@@ -171,5 +198,35 @@ class Program
             Console.WriteLine(hexLine);
             Console.WriteLine();
         }
+    }
+
+    private static int[] InverseBox(int[] box)
+    {
+        var inverse = new int[box.Length];
+        for (int i = 0; i < box.Length; i++)
+        {
+            inverse[box[i]] = i;
+        }
+        return inverse;
+    }
+    
+    private byte[] EncryptBlock(byte[] block)
+    {
+        return block;
+    }
+
+    private byte[] DecryptBlock(byte[] block)
+    {
+        return block;
+    }
+
+    private byte[] EncryptEcb(byte[] plaintext)
+    {
+        return plaintext;
+    }
+
+    private byte[] DecryptEcb(byte[] ciphertext)
+    {
+        return ciphertext;
     }
 }
