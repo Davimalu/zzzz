@@ -43,20 +43,18 @@ class Program
             return;
         }
         
-        Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!"); 
-        
-        SplitIntoBlocks(fileBytes, 4);
+        Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
+
+        var paddedBytes = AddPadding(fileBytes, 4);
+        var blocks = SplitIntoBlocks(paddedBytes, 4);
+        PrintBlocks(blocks);
     }
-    
-    private static byte[][] SplitIntoBlocks(byte[] bytes, int blockSize)
+
+    private static byte[] AddPadding(byte[] bytes, int blockSize)
     {
-        // Add padding first (so splitting is easier later)
-        int totalBlocks = (int)Math.Ceiling(bytes.Length / (double)blockSize);
-        
         Console.WriteLine($"\nLength of input file: {bytes.Length} bytes");
         Console.WriteLine($"Block size: {blockSize} bytes");
         Console.WriteLine($"{bytes.Length} / {blockSize} = {bytes.Length / blockSize} | Remainder: {bytes.Length % blockSize}\n");
-        Console.WriteLine($"Input file consisting of {bytes.Length} bytes will be split into {totalBlocks} {blockSize}-byte blocks.");
         
         int requiredPadding = blockSize - (bytes.Length % blockSize);
         if (bytes.Length % blockSize != 0)
@@ -65,9 +63,8 @@ class Program
         }
         else
         {
-            totalBlocks++;
             requiredPadding = blockSize;
-            Console.WriteLine($"Since the number of bytes is a perfect multiple of the block size, we need one additional block ({blockSize} bytes) of padding only -> {totalBlocks} blocks.");
+            Console.WriteLine($"Since the number of bytes is a perfect multiple of the block size, we need one additional block ({blockSize} bytes) of padding only.");
         }
         
         byte[] paddedBytes = new byte[bytes.Length + requiredPadding];
@@ -77,22 +74,29 @@ class Program
         {
             paddedBytes[bytes.Length + i] = (byte)requiredPadding;
         }
+
+        return paddedBytes;
+    }
+    
+    
+    private static byte[][] SplitIntoBlocks(byte[] bytes, int blockSize)
+    {
+        int totalBlocks = (int)Math.Ceiling(bytes.Length / (double)blockSize);
+        Console.WriteLine($"\nInput file consisting of {bytes.Length} bytes will be split into {totalBlocks} {blockSize}-byte blocks.");
         
-        // Split into blocks
         byte[][] blocks = new byte[totalBlocks][];
 
         for (int i = 0; i < totalBlocks; i++)
         {
             blocks[i] = new byte[blockSize];
-            Array.Copy(paddedBytes, i * blockSize, blocks[i], 0, blockSize);
+            Array.Copy(bytes, i * blockSize, blocks[i], 0, blockSize);
         }
         
-        PrintBlocks(blocks);
         return blocks;
     }
     
     // This method was written with the help of generative AI (GLM 5.3)
-    private static void PrintBlocks(byte[][] blocks, int blocksPerLine = 6)
+    private static void PrintBlocks(byte[][] blocks, int blocksPerLine = 5)
     {
         Console.WriteLine();
         
