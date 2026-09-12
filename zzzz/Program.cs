@@ -6,6 +6,8 @@ namespace zzzz;
 
 class Program
 {
+    private const int BlockSize = 4;
+    
     // S-Box (4 Bit -> 4 Bit, Bijective)
     // Taken from PRESENT Cipher: https://link.springer.com/chapter/10.1007/978-3-540-74735-2_31 | Page 4
     private static readonly int[] SBox =
@@ -73,8 +75,8 @@ class Program
         
         Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
 
-        var paddedBytes = AddPadding(fileBytes, 4);
-        var blocks = SplitIntoBlocks(paddedBytes, 4);
+        var paddedBytes = AddPadding(fileBytes, BlockSize);
+        var blocks = SplitIntoBlocks(paddedBytes, BlockSize);
         PrintBlocks(blocks);
         
         // Rounds
@@ -96,7 +98,7 @@ class Program
         
         // TODO: Check if ciphertext is multiple of block length
         var concatenatedBytes = ConcatenateBlocks(blocks);
-        var unpaddedBytes = RemovePadding(concatenatedBytes, 4);
+        var unpaddedBytes = RemovePadding(concatenatedBytes, BlockSize);
         File.WriteAllBytes("output.txt", unpaddedBytes);
     }
 
@@ -263,7 +265,7 @@ class Program
             byte substitutedHighNibble = (byte)sBox[highNibble];
             byte substitutedLowNibble = (byte)sBox[lowNibble];
             
-            substitutedBlock[i] = (byte)((substitutedHighNibble << 4) | substitutedLowNibble);;
+            substitutedBlock[i] = (byte)((substitutedHighNibble << 4) | substitutedLowNibble);
         }
         
         return substitutedBlock;
@@ -315,6 +317,21 @@ class Program
         PrintBits(permutatedBlock, addNewLines: false);
         
         return permutatedBlock;
+    }
+
+    private static byte[][] GetRoundKeys(byte[] key, int rounds)
+    {
+        var roundKeys = new byte[rounds][];
+        var keyHash = System.Security.Cryptography.SHA256.HashData(key);
+
+        for (int i = 0; i < rounds; i++)
+        {
+            // Each block is 4 byte (32 Bit) -> each key should be 4 byte (32 Bit)
+            roundKeys[i] = new byte[BlockSize];
+            Array.Copy(keyHash, i * BlockSize, roundKeys[i], 0, BlockSize);
+        }
+
+        return roundKeys;
     }
 
     private static byte[] DecryptBlock(byte[] block)
