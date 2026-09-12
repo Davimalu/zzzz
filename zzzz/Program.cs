@@ -77,7 +77,7 @@ class Program
         };
         rootCommand.Options.Add(verboseOption);
         
-        Option<bool> debugOption = new("--debug", "-d")
+        Option<bool> debugOption = new("--debug", "-g")
         {
             Description = "pause the application between each cipher step (Block-Splitting, Padding, S-Box, P-Box, key addition) for debugging purposes"
         };
@@ -191,7 +191,6 @@ class Program
             Console.WriteLine($"{bytes.Length} / {blockSize} = {bytes.Length / blockSize} | Remainder: {bytes.Length % blockSize}\n");
         }
         
-        
         int requiredPadding = blockSize - (bytes.Length % blockSize);
         if (bytes.Length % blockSize != 0)
         {
@@ -293,9 +292,6 @@ class Program
 
     public static byte[] ApplyKeyToBlock(byte[] block, byte[] key)
     {
-        PrintBits("\nKey   : ", key, false);
-        PrintBits("Block : ", block, false);
-        
         byte[] processedBlock = new byte[block.Length];
         
         // XOR every bit in the block with every bit of the round key
@@ -303,8 +299,7 @@ class Program
         {
             processedBlock[i] = (byte)(block[i] ^ key[i]);
         }
-
-        PrintBits("Result: ", processedBlock, false);
+        
         return processedBlock;
     }
     
@@ -320,37 +315,41 @@ class Program
             Array.Copy(keyHash, i * BlockSize, roundKeys[i], 0, BlockSize);
         }
 
-        if (Verbose)
-            PrintRoundKeys(key, keyHash, roundKeys);
-
+        PrintRoundKeys(key, keyHash, roundKeys);
         return roundKeys;
     }
     
-    public static byte[] EncryptBlock(byte[] block, byte[] key)
+    public static byte[] EncryptBlock(byte[] block, byte[] key, bool verbose)
     {
         var substitutedBlock = SubstituteBlock(block, SBox);
-        PrintSubstitution(block, substitutedBlock);
+        if (verbose) PrintSubstitution(block, substitutedBlock);
         
         var permutatedBlock = PermutateBlock(substitutedBlock, PBox);
-        PrintBits("\nPermutation (Original):\n", substitutedBlock, true);
-        PrintBits("Result:\n", permutatedBlock, false);
+        if (verbose) PrintBits("\nPermutation (Original):\n", substitutedBlock, true);
+        if (verbose) PrintBits("Result:\n", permutatedBlock, false);
         
+        if (verbose) PrintBits("\nKey   : ", key, false);
+        if (verbose) PrintBits("Block : ", block, false);
         var finishedBlock = ApplyKeyToBlock(permutatedBlock, key);
+        if (verbose) PrintBits("Result: ", finishedBlock, false);
         
         return finishedBlock;
     }
 
-    public static byte[] DecryptBlock(byte[] block, byte[] key)
+    public static byte[] DecryptBlock(byte[] block, byte[] key, bool verbose)
     {
         // Exact reverse of encryption
+        if (verbose) PrintBits("\nKey   : ", key, false);
+        if (verbose) PrintBits("Block : ", block, false);
         var keyedBlock = ApplyKeyToBlock(block, key);
+        if (verbose) PrintBits("Result: ", keyedBlock, false);
         
         var unpermutatedBlock = PermutateBlock(keyedBlock, PBoxInv);
-        PrintBits("\nPermutation (Original):\n", keyedBlock, false);
-        PrintBits("Result:\n", unpermutatedBlock, true);
+        if (verbose) PrintBits("\nPermutation (Original):\n", keyedBlock, false);
+        if (verbose) PrintBits("Result:\n", unpermutatedBlock, true);
         
         var unsubstitutedBlock = SubstituteBlock(unpermutatedBlock, SBoxInv);
-        PrintSubstitution(unpermutatedBlock, unsubstitutedBlock);
+        if (verbose) PrintSubstitution(unpermutatedBlock, unsubstitutedBlock);
         
         return unsubstitutedBlock;
     }
@@ -372,7 +371,7 @@ class Program
             
             for (int j = 0; j < blocks.Length; j++)
             {
-                encryptedBlocks[j] = EncryptBlock(blocks[j], roundKeys[i]);
+                encryptedBlocks[j] = EncryptBlock(blocks[j], roundKeys[i], i == 0);
             }
             
             blocks = encryptedBlocks;
@@ -391,8 +390,6 @@ class Program
         
         // Rounds
         byte[][] decryptedBlocks = new byte[blocks.Length][];
-        
-        
         for (int i = 7; i >= 0; i--)
         {
             if (Verbose)
@@ -400,7 +397,7 @@ class Program
             
             for (int j = 0; j < blocks.Length; j++)
             {
-                decryptedBlocks[j] = DecryptBlock(blocks[j], roundKeys[i]);
+                decryptedBlocks[j] = DecryptBlock(blocks[j], roundKeys[i], i == 7);
             }
 
             blocks = decryptedBlocks;
@@ -415,6 +412,9 @@ class Program
     
     private static void PrintRoundKeys(byte[] key, byte[] keyHash, byte[][] roundKeys)
     {
+        if (!Verbose)
+            return;
+        
         Console.WriteLine($"Key: {Encoding.ASCII.GetString(key)}");
         Console.WriteLine($"Key Hash: {Convert.ToHexString(keyHash)}");
         Console.WriteLine();
