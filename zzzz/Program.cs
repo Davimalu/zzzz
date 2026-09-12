@@ -75,31 +75,21 @@ class Program
         
         Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
 
-        var paddedBytes = AddPadding(fileBytes, BlockSize);
-        var blocks = SplitIntoBlocks(paddedBytes, BlockSize);
-        PrintBlocks(blocks);
-        
-        // Rounds
-        byte[][] encryptedBlocks = new byte[blocks.Length][];
-        for (int i = 0; i < 8; i++)
+        if (mode == Mode.encrypt)
         {
-            Console.WriteLine($"Round {i+1}");
-            
-            for (int j = 0; j < blocks.Length; j++)
-            {
-                encryptedBlocks[j] = EncryptBlock(blocks[j]);
-            }
-
-            blocks = encryptedBlocks;
-            PrintBlocks(encryptedBlocks);
+            var encryptedBytes = EncryptEcb(fileBytes, keyBytes);
+            File.WriteAllBytes(filePath + ".enc", encryptedBytes);
         }
+
+        if (mode == Mode.decrypt)
+        {
+            // Decryption
         
-        // Decryption
-        
-        // TODO: Check if ciphertext is multiple of block length
-        var concatenatedBytes = ConcatenateBlocks(blocks);
-        var unpaddedBytes = RemovePadding(concatenatedBytes, BlockSize);
-        File.WriteAllBytes("output.txt", unpaddedBytes);
+            // TODO: Check if ciphertext is multiple of block length
+            //var concatenatedBytes = ConcatenateBlocks(blocks);
+            //var unpaddedBytes = RemovePadding(concatenatedBytes, BlockSize);
+            //File.WriteAllBytes("output.txt", unpaddedBytes);
+        }
     }
 
     private static byte[] ConcatenateBlocks(byte[][] blocks)
@@ -301,22 +291,26 @@ class Program
         
         return permutatedBlock;
     }
-    
-    private static byte[] EncryptBlock(byte[] block)
+
+    private static byte[] ApplyKeyToBlock(byte[] block, byte[] key)
     {
-        Console.WriteLine("\n--- New Block ---\n");
+        byte[] processedBlock = new byte[block.Length];
         
+        // XOR every bit in the block with every bit of the round key
+        for (int i = 0; i < block.Length; i++)
+        {
+            processedBlock[i] = (byte)(block[i] ^ key[i]);
+        }
+        return processedBlock;
+    }
+    
+    private static byte[] EncryptBlock(byte[] block, byte[] key)
+    {
         var substitutedBlock = SubstituteBlock(block, SBox);
-        Console.WriteLine("Block after Substitution (S-Box):");
-        PrintBlock(substitutedBlock);
-        
-        Console.WriteLine("Block before Permutation (P-Box):");
-        PrintBits(substitutedBlock, addNewLines: true);
         var permutatedBlock = PermutateBlock(substitutedBlock, PBox);
-        Console.WriteLine("Block after Permutation (P-Box):");
-        PrintBits(permutatedBlock, addNewLines: false);
+        var finishedBlock = ApplyKeyToBlock(permutatedBlock, key);
         
-        return permutatedBlock;
+        return finishedBlock;
     }
 
     private static byte[][] GetRoundKeys(byte[] key, int rounds)
@@ -339,9 +333,30 @@ class Program
         return block;
     }
 
-    private static byte[] EncryptEcb(byte[] plaintext)
+    private static byte[] EncryptEcb(byte[] fileBytes, byte[] keyBytes)
     {
-        return plaintext;
+        var paddedBytes = AddPadding(fileBytes, BlockSize);
+        var blocks = SplitIntoBlocks(paddedBytes, BlockSize);
+        PrintBlocks(blocks);
+
+        var roundKeys = GetRoundKeys(keyBytes, 8);
+        
+        // Rounds
+        byte[][] encryptedBlocks = new byte[blocks.Length][];
+        for (int i = 0; i < 8; i++)
+        {
+            Console.WriteLine($"Round {i+1}");
+            
+            for (int j = 0; j < blocks.Length; j++)
+            {
+                encryptedBlocks[j] = EncryptBlock(blocks[j], roundKeys[i]);
+            }
+
+            blocks = encryptedBlocks;
+            PrintBlocks(encryptedBlocks);
+        }
+        
+        return ConcatenateBlocks(encryptedBlocks);
     }
 
     private static byte[] DecryptEcb(byte[] ciphertext)
