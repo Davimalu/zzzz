@@ -9,6 +9,7 @@ class Program
 {
     public const int BlockSize = 4;
     public static bool Verbose = false;
+    public static bool Debug = false;
     
     // S-Box (4 Bit -> 4 Bit, Bijective)
     // Taken from PRESENT Cipher: https://link.springer.com/chapter/10.1007/978-3-540-74735-2_31 | Page 4
@@ -76,6 +77,12 @@ class Program
         };
         rootCommand.Options.Add(verboseOption);
         
+        Option<bool> debugOption = new("--debug", "-d")
+        {
+            Description = "pause the application between each cipher step (Block-Splitting, Padding, S-Box, P-Box, key addition) for debugging purposes"
+        };
+        rootCommand.Options.Add(debugOption);
+        
         rootCommand.SetAction(parseResult =>
         {
             string filePath = parseResult.GetValue(inputFileOption)!;
@@ -90,6 +97,7 @@ class Program
             
             Mode mode = parseResult.GetValue(encryptOption) == true ? Mode.encrypt : Mode.decrypt;
             Verbose = parseResult.GetValue(verboseOption);
+            Debug = parseResult.GetValue(debugOption);
             
             Console.WriteLine($"Loading {filePath}...");
             if (!File.Exists(filePath))
@@ -106,8 +114,8 @@ class Program
             byte[] keyBytes = File.ReadAllBytes(keyPath);
         
             Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
-            WaitForEnter();
-        
+            if (Debug) WaitForEnter();
+            
             switch (mode)
             {
                 case Mode.encrypt:
@@ -222,64 +230,6 @@ class Program
         return blocks;
     }
     
-    // This method was written with the help of generative AI (GLM 5.3)
-    public static void PrintBlocks(byte[][] blocks, int blocksPerLine = 5)
-    {
-        Console.WriteLine();
-        
-        for (int start = 0; start < blocks.Length; start += blocksPerLine)
-        {
-            var asciiLine = new StringBuilder();
-            var hexLine = new StringBuilder();
-
-            int end = Math.Min(start + blocksPerLine, blocks.Length);
-
-            for (int i = start; i < end; i++)
-            {
-                if (i > start) // block separator between blocks, not before the first
-                {
-                    asciiLine.Append(" |");
-                    hexLine.Append(" |");
-                }
-
-                foreach (byte singleByte in blocks[i])
-                {
-                    // Printable ASCII range -> show the char; otherwise a dot
-                    char c = (singleByte >= 32 && singleByte < 127) ? (char)singleByte : '.';
-                    asciiLine.Append($"{c,4}");
-                    hexLine.Append($"{singleByte,4:X2}");
-                }
-            }
-            
-            Console.WriteLine(asciiLine);
-            Console.WriteLine(hexLine);
-            Console.WriteLine();
-        }
-    }
-
-    public static void PrintBlock(byte[] block)
-    {
-        foreach (var singleByte in block)
-        {
-            Console.WriteLine($"{singleByte,4:X2}");
-        }
-        Console.WriteLine();
-    }
-    
-    public static void PrintBits(byte[] block, bool addNewLines)
-    {
-        foreach (byte b in block)
-        {
-            Console.Write(Convert.ToString(b, 2).PadLeft(8, '0') + " ");
-            if (addNewLines)
-            {
-                Console.WriteLine();
-            }
-        }
-            
-        Console.WriteLine();
-    }
-
     public static int[] InverseBox(int[] box)
     {
         var inverse = new int[box.Length];
@@ -343,6 +293,9 @@ class Program
 
     public static byte[] ApplyKeyToBlock(byte[] block, byte[] key)
     {
+        PrintBits("\nKey   : ", key, false);
+        PrintBits("Block : ", block, false);
+        
         byte[] processedBlock = new byte[block.Length];
         
         // XOR every bit in the block with every bit of the round key
@@ -350,6 +303,8 @@ class Program
         {
             processedBlock[i] = (byte)(block[i] ^ key[i]);
         }
+
+        PrintBits("Result: ", processedBlock, false);
         return processedBlock;
     }
     
@@ -366,18 +321,7 @@ class Program
         }
 
         if (Verbose)
-        {
-            Console.WriteLine($"Key: {Encoding.ASCII.GetString(key)}");
-            Console.WriteLine($"Key Hash: {Convert.ToHexString(keyHash)}");
-            Console.WriteLine();
-
-            for (int i = 0; i < roundKeys.Length; i++)
-            {
-                Console.WriteLine($"K{i}: {Convert.ToHexString(roundKeys[i])}");
-            }
-            
-            WaitForEnter();
-        }
+            PrintRoundKeys(key, keyHash, roundKeys);
 
         return roundKeys;
     }
@@ -385,7 +329,12 @@ class Program
     public static byte[] EncryptBlock(byte[] block, byte[] key)
     {
         var substitutedBlock = SubstituteBlock(block, SBox);
+        PrintSubstitution(block, substitutedBlock);
+        
         var permutatedBlock = PermutateBlock(substitutedBlock, PBox);
+        PrintBits("\nPermutation (Original):\n", substitutedBlock, true);
+        PrintBits("Result:\n", permutatedBlock, false);
+        
         var finishedBlock = ApplyKeyToBlock(permutatedBlock, key);
         
         return finishedBlock;
@@ -395,8 +344,13 @@ class Program
     {
         // Exact reverse of encryption
         var keyedBlock = ApplyKeyToBlock(block, key);
+        
         var unpermutatedBlock = PermutateBlock(keyedBlock, PBoxInv);
+        PrintBits("\nPermutation (Original):\n", keyedBlock, false);
+        PrintBits("Result:\n", unpermutatedBlock, true);
+        
         var unsubstitutedBlock = SubstituteBlock(unpermutatedBlock, SBoxInv);
+        PrintSubstitution(unpermutatedBlock, unsubstitutedBlock);
         
         return unsubstitutedBlock;
     }
@@ -405,12 +359,7 @@ class Program
     {
         var paddedBytes = AddPadding(fileBytes, BlockSize);
         var blocks = SplitIntoBlocks(paddedBytes, BlockSize);
-        
-        if (Verbose)
-        {
-            PrintBlocks(blocks);
-            WaitForEnter();
-        }
+        PrintBlocks(blocks);
 
         var roundKeys = GetRoundKeys(keyBytes, 8);
         
@@ -418,17 +367,16 @@ class Program
         byte[][] encryptedBlocks = new byte[blocks.Length][];
         for (int i = 0; i < 8; i++)
         {
-            Console.Write($"Round {i+1}");
+            if (Verbose)
+                Console.WriteLine($"--- Round {i+1} ---");
             
             for (int j = 0; j < blocks.Length; j++)
             {
                 encryptedBlocks[j] = EncryptBlock(blocks[j], roundKeys[i]);
             }
-
-            Console.WriteLine(" -> COMPLETE");
+            
             blocks = encryptedBlocks;
-            if (Verbose)
-                PrintBlocks(encryptedBlocks);
+            PrintBlocks(encryptedBlocks);
         }
         
         return ConcatenateBlocks(encryptedBlocks);
@@ -447,7 +395,8 @@ class Program
         
         for (int i = 7; i >= 0; i--)
         {
-            Console.WriteLine($"Round {i+1}");
+            if (Verbose)
+                Console.WriteLine($"--- Round {i+1} ---");
             
             for (int j = 0; j < blocks.Length; j++)
             {
@@ -463,12 +412,107 @@ class Program
         
         return unpaddedBytes;
     }
+    
+    private static void PrintRoundKeys(byte[] key, byte[] keyHash, byte[][] roundKeys)
+    {
+        Console.WriteLine($"Key: {Encoding.ASCII.GetString(key)}");
+        Console.WriteLine($"Key Hash: {Convert.ToHexString(keyHash)}");
+        Console.WriteLine();
 
+        for (int i = 0; i < roundKeys.Length; i++)
+        {
+            Console.WriteLine($"K{i}: {Convert.ToHexString(roundKeys[i])}");
+        }
+        
+        if (Debug) WaitForEnter();
+    }
+    
+    public static void PrintBits(string prefix, byte[] block, bool addNewLines)
+    {
+        if(!Verbose) return;
+        
+        Console.Write(prefix);
+        
+        foreach (byte b in block)
+        {
+            Console.Write(Convert.ToString(b, 2).PadLeft(8, '0') + " ");
+            if (addNewLines)
+            {
+                Console.WriteLine();
+            }
+        }
+        
+        Console.WriteLine();
+        
+        if (Debug) WaitForEnter();
+    }
+    
+    // This method was written with the help of generative AI (GLM 5.3)
+    public static void PrintBlocks(byte[][] blocks, int blocksPerLine = 5)
+    {
+        if (!Verbose)
+            return;
+        
+        Console.WriteLine();
+        
+        for (int start = 0; start < blocks.Length; start += blocksPerLine)
+        {
+            var asciiLine = new StringBuilder();
+            var hexLine = new StringBuilder();
+
+            int end = Math.Min(start + blocksPerLine, blocks.Length);
+
+            for (int i = start; i < end; i++)
+            {
+                if (i > start) // block separator between blocks, not before the first
+                {
+                    asciiLine.Append(" |");
+                    hexLine.Append(" |");
+                }
+
+                foreach (byte singleByte in blocks[i])
+                {
+                    // Printable ASCII range -> show the char; otherwise a dot
+                    char c = (singleByte >= 32 && singleByte < 127) ? (char)singleByte : '.';
+                    asciiLine.Append($"{c,4}");
+                    hexLine.Append($"{singleByte,4:X2}");
+                }
+            }
+            
+            Console.WriteLine(asciiLine);
+            Console.WriteLine(hexLine);
+            Console.WriteLine();
+        }
+        
+        if (Debug) WaitForEnter();
+    }
+
+    public static void PrintBlock(string prefix, byte[] block)
+    {
+        Console.Write(prefix);
+        foreach (var singleByte in block)
+        {
+            Console.WriteLine($"{singleByte:X2}");
+        }
+        
+        if (Debug) WaitForEnter();
+    }
+    
+    private static void PrintSubstitution(byte[] block, byte[] substitutedBlock)
+    {
+        if (!Verbose)
+            return;
+        
+        for (int i = 0; i < block.Length; i++)
+        {
+            Console.WriteLine($"{block[i]:X2} -> {substitutedBlock[i]:X2}");
+        }
+        
+        if (Debug) WaitForEnter();
+    }
+    
     public static void WaitForEnter()
     {
-        Console.WriteLine();
-        Console.WriteLine("Press [ENTER] key to continue...");
         while (Console.ReadKey(intercept: true).Key != ConsoleKey.Enter) { }
-        Console.WriteLine();
     }
 }
