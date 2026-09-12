@@ -54,41 +54,47 @@ class Program
         Console.WriteLine($"Loading {filePath}...");
         if (!File.Exists(filePath))
         {
-            Console.WriteLine($"File '{filePath}' does not exist!");
-            return;
+            throw new FileNotFoundException($"File '{filePath}' does not exist!");
         }
         byte[] fileBytes = File.ReadAllBytes(filePath);
         
         Console.WriteLine($"Loading {keyPath}...");
         if (!File.Exists(keyPath))
         {
-            Console.WriteLine($"Key '{keyPath}' does not exist!");
-            return;
+            throw new FileNotFoundException($"Key '{keyPath}' does not exist!");
         }
         byte[] keyBytes = File.ReadAllBytes(keyPath);
 
         if (!Enum.TryParse<Mode>(modeString, out var mode))
         {
-            Console.WriteLine($"Mode '{modeString}' does not exist!");
-            return;
+            throw new ArgumentException($"Mode '{modeString}' does not exist!", nameof(mode));
         }
         
         Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
 
-        if (mode == Mode.encrypt)
+        switch (mode)
         {
-            var encryptedBytes = EncryptEcb(fileBytes, keyBytes);
-            File.WriteAllBytes(filePath + ".enc", encryptedBytes);
-        }
+            case Mode.encrypt:
+            {
+                var encryptedBytes = EncryptEcb(fileBytes, keyBytes);
+                File.WriteAllBytes(filePath + ".enc", encryptedBytes);
+                break;
+            }
+            case Mode.decrypt:
+            {
+                if (fileBytes.Length % BlockSize != 0 || fileBytes.Length == 0)
+                {
+                    throw new InvalidOperationException($"Ciphertext of length {fileBytes.Length} is either empty or not a multiple of BlockSize {BlockSize}");
+                }
+                
+                var decryptedBytes = DecryptEcb(fileBytes, keyBytes);
 
-        if (mode == Mode.decrypt)
-        {
-            // Decryption
-        
-            // TODO: Check if ciphertext is multiple of block length
-            //var concatenatedBytes = ConcatenateBlocks(blocks);
-            //var unpaddedBytes = RemovePadding(concatenatedBytes, BlockSize);
-            //File.WriteAllBytes("output.txt", unpaddedBytes);
+                string fileName = filePath.EndsWith(".enc") ? filePath[..^4] : filePath + ".dec";
+                File.WriteAllBytes(fileName, decryptedBytes);
+                break;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mode));
         }
     }
 
@@ -304,15 +310,6 @@ class Program
         return processedBlock;
     }
     
-    private static byte[] EncryptBlock(byte[] block, byte[] key)
-    {
-        var substitutedBlock = SubstituteBlock(block, SBox);
-        var permutatedBlock = PermutateBlock(substitutedBlock, PBox);
-        var finishedBlock = ApplyKeyToBlock(permutatedBlock, key);
-        
-        return finishedBlock;
-    }
-
     private static byte[][] GetRoundKeys(byte[] key, int rounds)
     {
         var roundKeys = new byte[rounds][];
@@ -327,10 +324,24 @@ class Program
 
         return roundKeys;
     }
-
-    private static byte[] DecryptBlock(byte[] block)
+    
+    private static byte[] EncryptBlock(byte[] block, byte[] key)
     {
-        return block;
+        var substitutedBlock = SubstituteBlock(block, SBox);
+        var permutatedBlock = PermutateBlock(substitutedBlock, PBox);
+        var finishedBlock = ApplyKeyToBlock(permutatedBlock, key);
+        
+        return finishedBlock;
+    }
+
+    private static byte[] DecryptBlock(byte[] block, byte[] key)
+    {
+        // Exact reverse of encryption
+        var keyedBlock = ApplyKeyToBlock(block, key);
+        var unpermutatedBlock = PermutateBlock(keyedBlock, PBoxInv);
+        var unsubstitutedBlock = SubstituteBlock(unpermutatedBlock, SBoxInv);
+        
+        return unsubstitutedBlock;
     }
 
     private static byte[] EncryptEcb(byte[] fileBytes, byte[] keyBytes)
@@ -359,8 +370,33 @@ class Program
         return ConcatenateBlocks(encryptedBlocks);
     }
 
-    private static byte[] DecryptEcb(byte[] ciphertext)
+    private static byte[] DecryptEcb(byte[] fileBytes, byte[] keyBytes)
     {
-        return ciphertext;
+        var blocks = SplitIntoBlocks(fileBytes, BlockSize);
+        PrintBlocks(blocks);
+
+        var roundKeys = GetRoundKeys(keyBytes, 8);
+        
+        // Rounds
+        byte[][] decryptedBlocks = new byte[blocks.Length][];
+        
+        
+        for (int i = 7; i >= 0; i--)
+        {
+            Console.WriteLine($"Round {i+1}");
+            
+            for (int j = 0; j < blocks.Length; j++)
+            {
+                decryptedBlocks[j] = DecryptBlock(blocks[j], roundKeys[i]);
+            }
+
+            blocks = decryptedBlocks;
+            PrintBlocks(decryptedBlocks);
+        }
+        
+        var concatenatedBytes = ConcatenateBlocks(blocks);
+        var unpaddedBytes = RemovePadding(concatenatedBytes, BlockSize);
+        
+        return unpaddedBytes;
     }
 }
