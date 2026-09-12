@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.CommandLine;
 using System.Text;
 using zzzz.Model;
 
@@ -6,16 +7,17 @@ namespace zzzz;
 
 class Program
 {
-    private const int BlockSize = 4;
+    public const int BlockSize = 4;
+    public static bool Verbose = false;
     
     // S-Box (4 Bit -> 4 Bit, Bijective)
     // Taken from PRESENT Cipher: https://link.springer.com/chapter/10.1007/978-3-540-74735-2_31 | Page 4
-    private static readonly int[] SBox =
+    public static readonly int[] SBox =
     {
         0xC, 0x5, 0x6, 0xB, 0x9, 0x0, 0xA, 0xD,
         0x3, 0xE, 0xF, 0x8, 0x4, 0x7, 0x1, 0x2
     };
-    private static readonly int[] SBoxInv = InverseBox(SBox);
+    public static readonly int[] SBoxInv = InverseBox(SBox);
     
     // P-Box (32 Bit, same as block length | Each P-Box will be fed by 8 S-Boxes (8 * 4 = 32 Bit))
     // 32-Bit is quite small -> I didn't find an existing one -> Used "Spaltentransposition" with key length of 4
@@ -28,77 +30,114 @@ class Program
      *  24  25  26  27
      *  28  29  30  31
      */
-    private static readonly int[] PBox =
+    public static readonly int[] PBox =
     {
         0, 4, 8, 12, 16, 20, 24, 28, 1, 5, 9, 13, 17, 21, 25, 29,
         2, 6, 10, 14, 18, 22, 26, 30, 3, 7, 11, 15, 19, 23, 27, 31
     };
-    private static readonly int[] PBoxInv = InverseBox(PBox);
+    public static readonly int[] PBoxInv = InverseBox(PBox);
     
     static void Main(string[] args)
     {
         string logo = File.ReadAllText("assets/logo.txt");
         Console.WriteLine(logo);
         Console.WriteLine("Welcome to Zeugner's Zuper Zecure Zypher!\n");
+        
+        RootCommand rootCommand = new("A primitive (insecure!) block cipher that encrypts/decrypts any given file using a Substitution–permutation network (SPN)!");
+        Option<string> inputFileOption = new("--input", "-i")
+        {
+            Description = "file containing the plaintext or ciphertext to encrypt/decrypt",
+            Required = true,
+        };
+        rootCommand.Options.Add(inputFileOption);
+        
+        Option<string> keyFileOption = new("--key", "-k")
+        {
+            Description = "file containing the key to use for encryption/decryption",
+            Required = true,
+        };
+        rootCommand.Options.Add(keyFileOption);
+        
+        Option<bool> encryptOption = new("--encrypt", "-e")
+        {
+            Description = "use the provided --key to encrypt the contents of the --input file"
+        };
+        rootCommand.Options.Add(encryptOption);
+        
+        Option<bool> decryptOption = new("--decrypt", "-d")
+        {
+            Description = "use the provided --key to decrypt the contents of the --input file"
+        };
+        rootCommand.Options.Add(decryptOption);
+        
+        Option<bool> verboseOption = new("--verbose", "-v")
+        {
+            Description = "output the state between each cipher step (Block-Splitting, Padding, S-Box, P-Box, key addition) for demonstration purposes"
+        };
+        rootCommand.Options.Add(verboseOption);
+        
+        rootCommand.SetAction(parseResult =>
+        {
+            string filePath = parseResult.GetValue(inputFileOption)!;
+            string keyPath = parseResult.GetValue(keyFileOption)!;
+            bool encryptRequested = parseResult.GetValue(encryptOption);
+            bool decryptRequested = parseResult.GetValue(decryptOption);
 
-        if (args.Length != 3)
-        {
-            Console.WriteLine("Usage: zzzz <file> <key> <mode>");
-            return;
-        }
-        
-        var filePath = args[0];
-        var keyPath = args[1];
-        var modeString = args[2];
-        
-        Console.WriteLine($"Loading {filePath}...");
-        if (!File.Exists(filePath))
-        {
-            throw new FileNotFoundException($"File '{filePath}' does not exist!");
-        }
-        byte[] fileBytes = File.ReadAllBytes(filePath);
-        
-        Console.WriteLine($"Loading {keyPath}...");
-        if (!File.Exists(keyPath))
-        {
-            throw new FileNotFoundException($"Key '{keyPath}' does not exist!");
-        }
-        byte[] keyBytes = File.ReadAllBytes(keyPath);
-
-        if (!Enum.TryParse<Mode>(modeString, out var mode))
-        {
-            throw new ArgumentException($"Mode '{modeString}' does not exist!", nameof(mode));
-        }
-        
-        Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
-
-        switch (mode)
-        {
-            case Mode.encrypt:
+            if ((encryptRequested && decryptRequested) || (!encryptRequested && !decryptRequested))
             {
-                var encryptedBytes = EncryptEcb(fileBytes, keyBytes);
-                File.WriteAllBytes(filePath + ".enc", encryptedBytes);
-                break;
+                throw new ArgumentException("You must specify whether you want to --encrypt or --decrypt the provided file.");
             }
-            case Mode.decrypt:
+            
+            Mode mode = parseResult.GetValue(encryptOption) == true ? Mode.encrypt : Mode.decrypt;
+            Verbose = parseResult.GetValue(verboseOption);
+            
+            Console.WriteLine($"Loading {filePath}...");
+            if (!File.Exists(filePath))
             {
-                if (fileBytes.Length % BlockSize != 0 || fileBytes.Length == 0)
+                throw new FileNotFoundException($"File '{filePath}' does not exist!");
+            }
+            byte[] fileBytes = File.ReadAllBytes(filePath);
+        
+            Console.WriteLine($"Loading {keyPath}...");
+            if (!File.Exists(keyPath))
+            {
+                throw new FileNotFoundException($"Key '{keyPath}' does not exist!");
+            }
+            byte[] keyBytes = File.ReadAllBytes(keyPath);
+        
+            Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
+            WaitForEnter();
+        
+            switch (mode)
+            {
+                case Mode.encrypt:
                 {
-                    throw new InvalidOperationException($"Ciphertext of length {fileBytes.Length} is either empty or not a multiple of BlockSize {BlockSize}");
+                    var encryptedBytes = EncryptEcb(fileBytes, keyBytes);
+                    File.WriteAllBytes(filePath + ".enc", encryptedBytes);
+                    break;
                 }
+                case Mode.decrypt:
+                {
+                    if (fileBytes.Length % BlockSize != 0 || fileBytes.Length == 0)
+                    {
+                        throw new InvalidOperationException($"Ciphertext of length {fileBytes.Length} is either empty or not a multiple of BlockSize {BlockSize}");
+                    }
                 
-                var decryptedBytes = DecryptEcb(fileBytes, keyBytes);
+                    var decryptedBytes = DecryptEcb(fileBytes, keyBytes);
 
-                string fileName = filePath.EndsWith(".enc") ? filePath[..^4] : filePath + ".dec";
-                File.WriteAllBytes(fileName, decryptedBytes);
-                break;
+                    string fileName = filePath.EndsWith(".enc") ? filePath[..^4] : filePath + ".dec";
+                    File.WriteAllBytes(fileName, decryptedBytes);
+                    break;
+                }
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mode));
             }
-            default:
-                throw new ArgumentOutOfRangeException(nameof(mode));
-        }
+        });
+        
+        rootCommand.Parse(args).Invoke();
     }
 
-    private static byte[] ConcatenateBlocks(byte[][] blocks)
+    public static byte[] ConcatenateBlocks(byte[][] blocks)
     {
         byte[] bytes = new byte[blocks.Length * blocks[0].Length];
 
@@ -112,7 +151,7 @@ class Program
         return bytes;
     }
 
-    private static byte[] RemovePadding(byte[] bytes, int blockSize)
+    public static byte[] RemovePadding(byte[] bytes, int blockSize)
     {
         var paddingBytes = (int)bytes.Last();
 
@@ -135,21 +174,25 @@ class Program
         return unpaddedBytes;
     }
     
-    private static byte[] AddPadding(byte[] bytes, int blockSize)
+    public static byte[] AddPadding(byte[] bytes, int blockSize)
     {
-        Console.WriteLine($"\nLength of input file: {bytes.Length} bytes");
-        Console.WriteLine($"Block size: {blockSize} bytes");
-        Console.WriteLine($"{bytes.Length} / {blockSize} = {bytes.Length / blockSize} | Remainder: {bytes.Length % blockSize}\n");
+        if (Verbose)
+        {
+            Console.WriteLine($"\nLength of input file: {bytes.Length} bytes");
+            Console.WriteLine($"Block size: {blockSize} bytes");
+            Console.WriteLine($"{bytes.Length} / {blockSize} = {bytes.Length / blockSize} | Remainder: {bytes.Length % blockSize}\n");
+        }
+        
         
         int requiredPadding = blockSize - (bytes.Length % blockSize);
         if (bytes.Length % blockSize != 0)
         {
-            Console.WriteLine($"Because the number of bytes isn't a perfect multiple of the block size, we need {requiredPadding} additional bytes of padding.");
+            if (Verbose) Console.WriteLine($"Because the number of bytes isn't a perfect multiple of the block size, we need {requiredPadding} additional bytes of padding.");
         }
         else
         {
             requiredPadding = blockSize;
-            Console.WriteLine($"Since the number of bytes is a perfect multiple of the block size, we need one additional block ({blockSize} bytes) of padding only.");
+            if (Verbose) Console.WriteLine($"Since the number of bytes is a perfect multiple of the block size, we need one additional block ({blockSize} bytes) of padding only.");
         }
         
         byte[] paddedBytes = new byte[bytes.Length + requiredPadding];
@@ -163,10 +206,10 @@ class Program
         return paddedBytes;
     }
     
-    private static byte[][] SplitIntoBlocks(byte[] bytes, int blockSize)
+    public static byte[][] SplitIntoBlocks(byte[] bytes, int blockSize)
     {
         int totalBlocks = (int)Math.Ceiling(bytes.Length / (double)blockSize);
-        Console.WriteLine($"\nInput file consisting of {bytes.Length} bytes will be split into {totalBlocks} {blockSize}-byte blocks.");
+        if (Verbose) Console.WriteLine($"\nInput file consisting of {bytes.Length} bytes will be split into {totalBlocks} {blockSize}-byte blocks.");
         
         byte[][] blocks = new byte[totalBlocks][];
 
@@ -180,7 +223,7 @@ class Program
     }
     
     // This method was written with the help of generative AI (GLM 5.3)
-    private static void PrintBlocks(byte[][] blocks, int blocksPerLine = 5)
+    public static void PrintBlocks(byte[][] blocks, int blocksPerLine = 5)
     {
         Console.WriteLine();
         
@@ -214,7 +257,7 @@ class Program
         }
     }
 
-    private static void PrintBlock(byte[] block)
+    public static void PrintBlock(byte[] block)
     {
         foreach (var singleByte in block)
         {
@@ -223,7 +266,7 @@ class Program
         Console.WriteLine();
     }
     
-    private static void PrintBits(byte[] block, bool addNewLines)
+    public static void PrintBits(byte[] block, bool addNewLines)
     {
         foreach (byte b in block)
         {
@@ -237,7 +280,7 @@ class Program
         Console.WriteLine();
     }
 
-    private static int[] InverseBox(int[] box)
+    public static int[] InverseBox(int[] box)
     {
         var inverse = new int[box.Length];
         for (int i = 0; i < box.Length; i++)
@@ -247,7 +290,7 @@ class Program
         return inverse;
     }
 
-    private static byte[] SubstituteBlock(byte[] block, int[] sBox)
+    public static byte[] SubstituteBlock(byte[] block, int[] sBox)
     {
         byte[] substitutedBlock = new byte[block.Length];
         
@@ -267,7 +310,7 @@ class Program
         return substitutedBlock;
     }
 
-    private static byte[] PermutateBlock(byte[] block, int[] pBox)
+    public static byte[] PermutateBlock(byte[] block, int[] pBox)
     {
         BitArray unpermutatedBits = new BitArray(block);
         BitArray permutatedBits = new BitArray(unpermutatedBits.Length);
@@ -298,7 +341,7 @@ class Program
         return permutatedBlock;
     }
 
-    private static byte[] ApplyKeyToBlock(byte[] block, byte[] key)
+    public static byte[] ApplyKeyToBlock(byte[] block, byte[] key)
     {
         byte[] processedBlock = new byte[block.Length];
         
@@ -310,7 +353,7 @@ class Program
         return processedBlock;
     }
     
-    private static byte[][] GetRoundKeys(byte[] key, int rounds)
+    public static byte[][] GetRoundKeys(byte[] key, int rounds)
     {
         var roundKeys = new byte[rounds][];
         var keyHash = System.Security.Cryptography.SHA256.HashData(key);
@@ -322,10 +365,24 @@ class Program
             Array.Copy(keyHash, i * BlockSize, roundKeys[i], 0, BlockSize);
         }
 
+        if (Verbose)
+        {
+            Console.WriteLine($"Key: {Encoding.ASCII.GetString(key)}");
+            Console.WriteLine($"Key Hash: {Convert.ToHexString(keyHash)}");
+            Console.WriteLine();
+
+            for (int i = 0; i < roundKeys.Length; i++)
+            {
+                Console.WriteLine($"K{i}: {Convert.ToHexString(roundKeys[i])}");
+            }
+            
+            WaitForEnter();
+        }
+
         return roundKeys;
     }
     
-    private static byte[] EncryptBlock(byte[] block, byte[] key)
+    public static byte[] EncryptBlock(byte[] block, byte[] key)
     {
         var substitutedBlock = SubstituteBlock(block, SBox);
         var permutatedBlock = PermutateBlock(substitutedBlock, PBox);
@@ -334,7 +391,7 @@ class Program
         return finishedBlock;
     }
 
-    private static byte[] DecryptBlock(byte[] block, byte[] key)
+    public static byte[] DecryptBlock(byte[] block, byte[] key)
     {
         // Exact reverse of encryption
         var keyedBlock = ApplyKeyToBlock(block, key);
@@ -344,33 +401,40 @@ class Program
         return unsubstitutedBlock;
     }
 
-    private static byte[] EncryptEcb(byte[] fileBytes, byte[] keyBytes)
+    public static byte[] EncryptEcb(byte[] fileBytes, byte[] keyBytes)
     {
         var paddedBytes = AddPadding(fileBytes, BlockSize);
         var blocks = SplitIntoBlocks(paddedBytes, BlockSize);
-        PrintBlocks(blocks);
+        
+        if (Verbose)
+        {
+            PrintBlocks(blocks);
+            WaitForEnter();
+        }
 
         var roundKeys = GetRoundKeys(keyBytes, 8);
         
-        // Rounds
+        // Multiple Rounds, ECB Mode
         byte[][] encryptedBlocks = new byte[blocks.Length][];
         for (int i = 0; i < 8; i++)
         {
-            Console.WriteLine($"Round {i+1}");
+            Console.Write($"Round {i+1}");
             
             for (int j = 0; j < blocks.Length; j++)
             {
                 encryptedBlocks[j] = EncryptBlock(blocks[j], roundKeys[i]);
             }
 
+            Console.WriteLine(" -> COMPLETE");
             blocks = encryptedBlocks;
-            PrintBlocks(encryptedBlocks);
+            if (Verbose)
+                PrintBlocks(encryptedBlocks);
         }
         
         return ConcatenateBlocks(encryptedBlocks);
     }
 
-    private static byte[] DecryptEcb(byte[] fileBytes, byte[] keyBytes)
+    public static byte[] DecryptEcb(byte[] fileBytes, byte[] keyBytes)
     {
         var blocks = SplitIntoBlocks(fileBytes, BlockSize);
         PrintBlocks(blocks);
@@ -398,5 +462,13 @@ class Program
         var unpaddedBytes = RemovePadding(concatenatedBytes, BlockSize);
         
         return unpaddedBytes;
+    }
+
+    public static void WaitForEnter()
+    {
+        Console.WriteLine();
+        Console.WriteLine("Press [ENTER] key to continue...");
+        while (Console.ReadKey(intercept: true).Key != ConsoleKey.Enter) { }
+        Console.WriteLine();
     }
 }
