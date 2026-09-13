@@ -329,7 +329,7 @@ class Program
         if (verbose) PrintBits("Result:\n", permutatedBlock, false);
         
         if (verbose) PrintBits("\nKey   : ", key, false);
-        if (verbose) PrintBits("Block : ", block, false);
+        if (verbose) PrintBits("Block : ", permutatedBlock, false);
         var finishedBlock = ApplyKeyToBlock(permutatedBlock, key);
         if (verbose) PrintBits("Result: ", finishedBlock, false);
         
