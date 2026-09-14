@@ -13,7 +13,7 @@ To compile Zeugner's Zuper Zecure Zipher, the .NET SDK version 10.0 must be inst
 3. Compile the application
 
 ```bash
-git clone https://github.com/davimalu/zzzz
+git clone https://github.com/Davimalu/zzzz.git
 cd zzzz
 dotnet build
 ```
