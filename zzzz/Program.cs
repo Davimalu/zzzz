@@ -42,7 +42,7 @@ class Program
     {
         string logo = File.ReadAllText("assets/logo.txt");
         Console.WriteLine(logo);
-        Console.WriteLine("Welcome to Zeugner's Zuper Zecure Zypher!\n");
+        Console.WriteLine("Welcome to Zeugner's Zuper Zecure Zipher!\n");
         
         RootCommand rootCommand = new("A primitive (insecure!) block cipher that encrypts/decrypts any given file using a Substitution–permutation network (SPN)!");
         Option<string> inputFileOption = new("--input", "-i")
@@ -113,7 +113,7 @@ class Program
             }
             byte[] keyBytes = File.ReadAllBytes(keyPath);
         
-            Console.WriteLine($"\nZeugner's Zuper Zecure Zypher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
+            Console.WriteLine($"\nZeugner's Zuper Zecure Zipher will {mode.ToString()} file '{filePath}' using key '{keyPath}'!");
             if (Debug) WaitForEnter();
             
             switch (mode)
