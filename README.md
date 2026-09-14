@@ -25,16 +25,14 @@ dotnet build
 zzzz [options]
 
 Options:
--i, --input <input> (REQUIRED)  file containing the plaintext or ciphertext to encrypt/decrypt
--k, --key <key> (REQUIRED)      file containing the key to use for encryption/decryption
--e, --encrypt                   use the provided --key to encrypt the contents of the --input file
--d, --decrypt                   use the provided --key to decrypt the contents of the --input file
--v, --verbose                   output the state between each cipher step (Block-Splitting, Padding, S-Box, P-Box, key addition) for demonstration
-purposes
--g, --debug                     pause the application between each cipher step (Block-Splitting, Padding, S-Box, P-Box, key addition) for
-debugging purposes
--?, -h, --help                  Show help and usage information
---version                       Show version information
+  -i, --input <input> (REQUIRED)  file containing the plaintext or ciphertext to encrypt/decrypt
+  -k, --key <key> (REQUIRED)      file containing the key to use for encryption/decryption
+  -e, --encrypt                   use the provided --key to encrypt the contents of the --input file
+  -d, --decrypt                   use the provided --key to decrypt the contents of the --input file
+  -v, --verbose                   output the state between each cipher step (Block-Splitting, Padding, S-Box, P-Box, key addition) for demonstration purposes
+  -g, --debug                     pause the application between each cipher step (Block-Splitting, Padding, S-Box, P-Box, key addition) for debugging purposes
+  -?, -h, --help                  Show help and usage information
+  --version                       Show version information
 ```
 
 ### Examples
